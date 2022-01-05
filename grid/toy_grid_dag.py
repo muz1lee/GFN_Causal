@@ -90,19 +90,16 @@ def func_cos_N(x):
 class GridEnv:
 
     def __init__(self, horizon, ndim=2, xrange=[-1, 1], func=None, allow_backward=False):
-        self.horizon = horizon
-        self.start = [xrange[0]] * ndim
-        self.ndim = ndim
-        self.width = xrange[1] - xrange[0]
+        self.horizon = horizon # 8
+        self.start = [xrange[0]] * ndim #  [-1,-1]
+        self.ndim = ndim # 2
+        self.width = xrange[1] - xrange[0] # 2
         self.func = (
             (lambda x: ((np.cos(x * 50) + 1) * norm.pdf(x * 5)).prod(-1) + 0.01)
             if func is None else func)
-        self.xspace = np.linspace(*xrange, horizon)
-        self.allow_backward = allow_backward  # If true then this is a
-                                              # MCMC ergodic env,
-                                              # otherwise a DAG
+        self.xspace = np.linspace(*xrange, horizon) # 生成-1到1的等差数列(8) , *parameter 用来接受任意多个参数并将其放在一个元组中
+        self.allow_backward = allow_backward  # If true then this is a MCMC ergodic env, otherwise a DAG
         self._true_density = None
-
     def obs(self, s=None):
         s = np.int32(self._state if s is None else s)
         z = np.zeros((self.horizon * self.ndim), dtype=np.float32)
@@ -130,6 +127,10 @@ class GridEnv:
                     continue
                 parents += [self.obs(sp)]
                 actions += [i]
+                
+        # 如果为 horizon-1 （在这里horizon = 8 ）  ， 则不会有action
+        # [3,3]的parent 为 [3,2]或者 [2,3] ， action 为[0,1]
+        # [7,3]的parent 为 [6,3], 没有[7,2] , action 为[0]     
         return parents, actions
 
     def step(self, a, s=None):
@@ -166,19 +167,37 @@ class GridEnv:
         return self.obs(s), self.func(self.s2x(s)), s, reverse_a
 
     def true_density(self):
+      
+        """
+        Computes the reward density (reward / sum(rewards)) of the whole space 
+
+        Returns
+        ----------
+        Tuple:
+          - normalized reward for each state
+          - states
+          - (un-normalized) reward)
+        """
         if self._true_density is not None:
             return self._true_density
         all_int_states = np.int32(list(itertools.product(*[list(range(self.horizon))]*self.ndim)))
+        # [0,0],[0,1]..., [7,6],[7,7]  shape：[64,2]
+        
         state_mask = np.array([len(self.parent_transitions(s, False)[0]) > 0 or sum(s) == 0
-                               for s in all_int_states])
+                               for s in all_int_states]) # # Only the termianl state is False , others are True 
+        
         all_xs = (np.float32(all_int_states) / (self.horizon-1) *
-                  (self.xspace[-1] - self.xspace[0]) + self.xspace[0])
-        traj_rewards = self.func(all_xs)[state_mask]
-        self._true_density = (traj_rewards / traj_rewards.sum(),
+                  (self.xspace[-1] - self.xspace[0]) + self.xspace[0]) # why ini_state / 7 * 2 -1 ? 
+        
+        traj_rewards = self.func(all_xs)[state_mask] #  use reward function to transform all_xs 
+        
+        self._true_density = (traj_rewards / traj_rewards.sum(), # the first line ins the true density 
                               list(map(tuple,all_int_states[state_mask])),
                               traj_rewards)
         return self._true_density
-
+      
+      
+      
     def all_possible_states(self):
         """Compute quantities for debugging and analysis"""
         # all possible action sequences
