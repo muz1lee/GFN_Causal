@@ -332,13 +332,26 @@ class FlowNetAgent:
             # Note to self: this is ugly, ugly code
             with torch.no_grad():
                 acts = Categorical(logits=self.model(s)).sample()
+  
+             
+            # step : list
+            # - For each e in envs, if corresponding done is False
+            #   - For each element i in env, and a in acts
+            #     - i.step(a)  [ call step_dag() function ]
+
             step = [i.step(a) for i,a in zip([e for d, e in zip(done, self.envs) if not d], acts)]
+            # step.dag - return self.obs(s), 0 if not done else self.func(self.s2x(s)), done, s
+
+            # if a == self.ndim , used_stop_action = True
             p_a = [self.envs[0].parent_transitions(sp_state, a == self.ndim)
-                   for a, (sp, r, done, sp_state) in zip(acts, step)]
+                   for a, (sp, r, done, sp_state) in zip(acts, step)]  
+            # return parents, action
+            
             batch += [[tf(i) for i in (p, a, [r], [sp], [d])]
                       for (p, a), (sp, r, d, _) in zip(p_a, step)]
             c = count(0)
-            m = {j:next(c) for j in range(mbsize) if not done[j]}
+            m = {j:next(c) for j in range(mbsize) if not done[j]} # count the number of envs which have not yet done
+            
             done = [bool(d or step[m[i]][2]) for i, d in enumerate(done)]
             s = tf([i[0] for i in step if not i[2]])
             for (_, r, d, sp) in step:
@@ -349,6 +362,27 @@ class FlowNetAgent:
 
 
     def learn_from(self, it, batch):
+ 
+        """
+        Computes the loss of a batch
+
+        Args
+        ----
+        it : int
+            Iteration
+        batch : ndarray
+            A batch of data: every row is a state (list), corresponding to all states visited in each sequence in the batch.
+        Returns
+        -------
+        loss : float
+            Loss, as per Equation 12 of https://arxiv.org/abs/2106.04399v1
+        term_loss : float
+            Loss of the terminal nodes only
+        flow_loss : float
+            Loss of the intermediate nodes only
+
+
+        """
         loginf = tf([1000])
         batch_idxs = tl(sum([[i]*len(parents) for i, (parents,_,_,_,_) in enumerate(batch)], []))
         parents, actions, r, sp, done = map(torch.cat, zip(*batch))
@@ -725,8 +759,8 @@ def main(args):
     all_visited = []
     empirical_distrib_losses = []
 
-    ttsr = max(int(args.train_to_sample_ratio), 1)
-    sttr = max(int(1/args.train_to_sample_ratio), 1) # sample to train ratio
+    ttsr = max(int(args.train_to_sample_ratio), 1) # train ratio to sample 1 
+    sttr = max(int(1/args.train_to_sample_ratio), 1) # sample to train ratio 1
 
     if args.method == 'ppo':
         ttsr = args.ppo_num_epochs
@@ -739,12 +773,12 @@ def main(args):
         for j in range(ttsr):
             losses = agent.learn_from(i * ttsr + j, data) # returns (opt loss, *metrics)
             if losses is not None:
-                losses[0].backward()
+                losses[0].backward()  # 反向传播计算梯度
                 if args.clip_grad_norm > 0:
                     torch.nn.utils.clip_grad_norm_(agent.parameters(),
                                                    args.clip_grad_norm)
-                opt.step()
-                opt.zero_grad()
+                opt.step() # 更新所有参数
+                opt.zero_grad()  # 将模型的参数梯度初始化为0
                 all_losses.append([i.item() for i in losses])
 
         if not i % 100:
