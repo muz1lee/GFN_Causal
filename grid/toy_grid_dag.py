@@ -352,10 +352,11 @@ class FlowNetAgent:
             c = count(0)
             m = {j:next(c) for j in range(mbsize) if not done[j]} # count the number of envs which have not yet done
             
-            done = [bool(d or step[m[i]][2]) for i, d in enumerate(done)]
-            s = tf([i[0] for i in step if not i[2]])
+            done = [bool(d or step[m[i]][2]) for i, d in enumerate(done)] # step[][2] -> True / False
+            
+            s = tf([i[0] for i in step if not i[2]])  # if have not done , save step[][0] -> self.obs(s)
             for (_, r, d, sp) in step:
-                if d:
+                if d:  # if done
                     all_visited.append(tuple(sp))
                     self.replay.add(tuple(sp), r)
         return batch
