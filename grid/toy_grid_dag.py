@@ -1,3 +1,7 @@
+
+"""
+To do : add DQNAgent amd QLearningAgent 
+"""
 import argparse
 import copy
 import gzip
@@ -60,6 +64,7 @@ parser.add_argument("--clip_grad_norm", default=0., type=float)
 # SAC
 parser.add_argument("--sac_alpha", default=0.98*np.log(1/3), type=float)
 
+# DQN 
 
 
 
@@ -495,7 +500,25 @@ class MARSAgent:
         # loss_p = loss  - pi.entropy().mean() * 0.1 # no, the entropy wasn't there in the paper
         return loss, pi.entropy().mean()
 
-
+class DQNAgent:
+    def __init__(self,args,envs):
+    
+    def parameters(self):
+     
+    def sample_many(self, mbsize, all_visited):
+     
+    def learn_from(self, it, batch):
+      
+class QLearningAgent:
+    def __init__(self,args,envs):
+    
+    def parameters(self):
+     
+    def sample_many(self, mbsize, all_visited):
+     
+    def learn_from(self, it, batch):
+      
+      
 class MHAgent:
     def __init__(self, args, envs):
         self.envs = envs
