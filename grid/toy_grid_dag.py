@@ -105,7 +105,11 @@ class GridEnv:
         self.xspace = np.linspace(*xrange, horizon) # 生成-1到1的等差数列(8) , *parameter 用来接受任意多个参数并将其放在一个元组中
         self.allow_backward = allow_backward  # If true then this is a MCMC ergodic env, otherwise a DAG
         self._true_density = None
+        
     def obs(self, s=None):
+      """
+      get the observation of state 
+      """
         s = np.int32(self._state if s is None else s)
         z = np.zeros((self.horizon * self.ndim), dtype=np.float32)
         z[np.arange(len(s)) * self.horizon + s] = 1
@@ -138,14 +142,19 @@ class GridEnv:
         # [7,3]的parent 为 [6,3], 没有[7,2] , action 为[0]     
         return parents, actions
 
-    def step(self, a, s=None):
-        if self.allow_backward:
+    def step(self, a, s=None): 
+        if self.allow_backward: # MCMC 
             return self.step_chain(a, s)
         return self.step_dag(a, s)
 
     def step_dag(self, a, s=None):
         _s = s
         s = (self._state if s is None else s) + 0
+        print('------------------------------------------')
+        print('actions:',a)
+        print('parent_s:',s)
+        print('observation(parent_s)', self.obs(s))
+        
         if a < self.ndim:
             s[a] += 1
 
@@ -153,6 +162,32 @@ class GridEnv:
         if _s is None:
             self._state = s
             self._step += 1
+        print('state',s)
+        print('observation(s)',self.obs(s))
+        print('reward', self.func(self.s2x(s)))
+        print('done',done)
+        
+        """
+        For example , if we use ndim=2 ,and horizon =4
+        will print the following results 
+        ------------------------------------------
+        actions: tensor(0)
+        parent_s: [1 1]
+        observation(parent_s) [0. 1. 0. 0. 0. 1. 0. 0.]
+        state [2 1]
+        observation(s) [0. 0. 1. 0. 0. 1. 0. 0.]
+        reward 0.01
+        done tensor(False)
+        ------------------------------------------
+        actions: tensor(2)
+        parent_s: [1 1]
+        observation(parent_s) [0. 1. 0. 0. 0. 1. 0. 0.]
+        state [1 1]
+        observation(s) [0. 1. 0. 0. 0. 1. 0. 0.]
+        reward 0.01
+        done tensor(True)
+------------------------------------------
+        """
         return self.obs(s), 0 if not done else self.func(self.s2x(s)), done, s
 
     def step_chain(self, a, s=None):
