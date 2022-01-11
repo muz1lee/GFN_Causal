@@ -64,7 +64,10 @@ parser.add_argument("--clip_grad_norm", default=0., type=float)
 # SAC
 parser.add_argument("--sac_alpha", default=0.98*np.log(1/3), type=float)
 
-# DQN 
+#DQN
+parser.add_argument("--explore_rate",default= 0.9,type=float)
+parser.add_argument("--reward_decay",default= 0.9,type=float)
+
 
 
 
@@ -348,6 +351,86 @@ class ReplayBuffer:
             r = 0
         return traj
 
+
+class DQNAgent:
+    def __init__(self,args,envs):
+        # self.model_policy_net = make_mlp([args.horizon * args.ndim] +
+        #                       [args.n_hid] * args.n_layers +
+        #                       [args.ndim + 1])
+        # self.model_target_net = make_mlp([args.horizon * args.ndim] +
+        #                       [args.n_hid] * args.n_layers +
+        #                       [args.ndim + 1])
+        self.model = make_mlp([args.horizon * args.ndim] +
+                              [args.n_hid] * args.n_layers +
+                              [args.ndim+1+1]) # +1 for stop action, +1 for V
+        self.model.to(args.dev)
+        self.envs = envs
+        self.mbsize = args.mbsize
+        self.explore_rate = args.explore_rate
+        self.reward_decay = args.reward_decay
+        self.replay = ReplayBuffer(args, envs[0])
+
+
+
+    def parameters(self):
+        return self.model.parameters()
+
+    def sample_many(self,mbsize,all_visited):
+        batch = []
+        s = tf([i.reset()[0] for i in self.envs])
+
+        done = [False] * mbsize
+        trajs = defaultdict(list)
+
+        while not all(done):
+            with torch.no_grad():
+                q_values = self.model(s)[:, :-1]
+
+                if rd.random() > self.explore_rate :
+                    acts = torch.randint(high = args.ndim,size=(s.shape[0],))
+
+                else:
+                    acts = q_values.argmax(dim=1)
+
+            print(acts)
+
+
+                #acts = Categorical(logits = self.model(s)[:, :-1]).sample()
+
+
+            step = [i.step(a) for i,a in zip([e for d, e in zip(done, self.envs) if not d], acts)]
+            c = count(0)
+            m = {j:next(c) for j in range(mbsize) if not done[j]}
+            for si, a, (sp, r, d, _), (traj_idx, _) in zip(s, acts, step, sorted(m.items())):
+                trajs[traj_idx].append([si[None, :]] + [tf([i]) for i in (a, r, sp, d)])
+
+            done = [bool(d or step[m[i]][2]) for i, d in enumerate(done)]
+            s = tf([i[0] for i in step if not i[2]])
+
+            print('new state',done)
+            print('________________________________________________')
+
+            for (_, r, d, sp) in step:
+                if d:
+                    all_visited.append(tuple(sp))
+
+        return sum(trajs.values(), [])
+        # s , action , reward, observation , done
+
+    def learn_from(self,it,batch):
+        s, a, r, sp, d = [torch.cat(i, 0) for i in zip(*batch)]
+
+
+        o = self.model(s)
+        logits, values = o[:, :-1], o[:, -1]
+        o_next = self.model(sp)
+        logits_next, values_next = o_next[:, :-1], o_next[:, -1]
+
+        expected_q_values = r + self.reward_decay*values_next*(1-d)
+
+        loss = nn.MSELoss()(values,expected_q_values.unsqueeze(1))
+        return (loss)      
+      
 class FlowNetAgent:
     def __init__(self, args, envs):
         self.model = make_mlp([args.horizon * args.ndim] +
@@ -810,7 +893,9 @@ def main(args):
         agent = SACAgent(args, envs)
     elif args.method == 'random_traj':
         agent = RandomTrajAgent(args, envs)
-
+    elif args.method == 'dqn':
+        agent = DQNAgent(args,envs)
+        
     opt = make_opt(agent.parameters(), args)
 
     # metrics
