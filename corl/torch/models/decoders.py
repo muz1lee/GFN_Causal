@@ -39,7 +39,7 @@ class LSTMDecoder(PointerDecoder):
         """"""
         self.batch_size = x.shape[0]
         self.seq_length = x.shape[1] # 10 
-        self.encoder_output = x  # 保存起来有用
+        self.encoder_output = x  
 
         s_i = torch.mean(x, 1)
         hi_ci = (torch.zeros((self.batch_size, self.hidden_dim), device=s_i.device),
@@ -49,7 +49,7 @@ class LSTMDecoder(PointerDecoder):
         s_list = []
         action_list = []
         prob_list = []
-        for step in range(self.seq_length): # 对10个node进行迭代
+        for step in range(self.seq_length): 
             h_list.append(hi_ci[0])
             c_list.append(hi_ci[1])
             s_list.append(s_i)
@@ -65,7 +65,7 @@ class LSTMDecoder(PointerDecoder):
         h_list = torch.stack(h_list, dim=1).squeeze()  # [Batch,seq_length,hidden]
         c_list = torch.stack(c_list, dim=1).squeeze()  # [Batch,seq_length,hidden]
         s_list = torch.stack(s_list, dim=1).squeeze()  # [Batch,seq_length,hidden]
-        print('s_list',s_list)
+        # print('s_list',s_list)
         # Stack visited indices
         actions = torch.stack(action_list, dim=1)  # [Batch,seq_length]
         mask_scores = torch.stack(prob_list, dim=1)  # [Batch,seq_length,seq_length]
@@ -73,6 +73,9 @@ class LSTMDecoder(PointerDecoder):
 
         return actions, mask_scores, s_list, h_list, c_list
 
+
+    
+# Add new variables to calculate inflow and outflow 
 
 class MLPDecoder(PointerDecoder):
     """Multi Layer Perceptions + Pointer Network"""
@@ -118,4 +121,5 @@ class MLPDecoder(PointerDecoder):
         self.mask = torch.zeros(1, device=self.device)
         in_flow_list = torch.stack(in_flow_list, dim=1) # [Batch,seq_length]
         next_q_list = torch.stack(next_q_list, dim=1) # [Batch,seq_length,seq_length]
+        
         return actions,action_list,prob_list, mask_scores, s_list,in_flow_list,next_q_list
