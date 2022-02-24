@@ -38,9 +38,6 @@ from castle.algorithms.gradient.gflownet.torch.utils.graph_analysis import get_g
 
 
 
-
-# import gym
-
 random.seed(1022)
 
 parser = argparse.ArgumentParser()
